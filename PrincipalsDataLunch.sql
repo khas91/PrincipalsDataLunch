@@ -18,8 +18,10 @@ IF OBJECT_ID('tempdb..#degrank') IS NOT NULL
 	DROP TABLE #degrank
 IF OBJECT_ID('tempdb..#highestdegearned') IS NOT NULL
 	DROP TABLE #highestdegearned
-		
-
+IF OBJECT_ID('tempdb..#numberAwards') IS NOT NULL
+	DROP TABLE #numberAwards
+IF OBJECT_ID('tempdb..#noshows') IS NOT NULL
+	DROP TABLE #noshows
 		
 SELECT DISTINCT
 	gen.FIELD_VALUE AS AWD_TYPE
@@ -245,10 +247,7 @@ GROUP BY
 	,prev.prevSSN3
 	,prev.prevSSN4
 
-SELECT
-	*
-FROM
-	#duals
+
 
 SELECT
 	 SRC.ISN_ST_STDNT_A
@@ -322,7 +321,14 @@ GROUP BY
 SELECT
 	num.*
 	,CASE
-		WHEN (stdnt.CR_APPL_DT <> '' OR stdnt.VC_APPL_DT <> '' OR stdnt.BA_APPL_DT <> '' OR COUNT(obj.PGM_ID) > 0) AND num.[Last Term At FSCJ] = 'Never' THEN 'No Show'
+		WHEN (stdnt.CR_APPL_DT BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3'
+			OR stdnt.CR_READMT_TERM BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3'
+			OR stdnt.VC_READMT_TERM BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3'
+			OR stdnt.VC_APPL_DT BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3' 
+			OR stdnt.BA_APPL_DT BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3' 
+			OR stdnt.BA_READMIT_TERM BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3'
+			OR (num.[Last Term Dual Enrolled] <> 'Never' AND COUNT(obj.PGM_ID) > 0)) 
+			AND num.[Last Term At FSCJ] = 'Never' THEN 'No Show'
 	END AS [No Shows]
 INTO
 	#noshows
@@ -355,12 +361,13 @@ GROUP BY
 	,num.[Highest Degree Earned]
 	,num.[Number of Awards]
 	,stdnt.CR_APPL_DT
+	,stdnt.CR_READMT_TERM
 	,stdnt.VC_APPL_DT
+	,stdnt.VC_READMT_TERM
 	,stdnt.BA_APPL_DT
+	,stdnt.BA_READMIT_TERM
 												
 SELECT
 	*
 FROM 
 	#noshows n
-WHERE
-	[Number of Awards] > 1

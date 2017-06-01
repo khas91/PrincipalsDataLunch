@@ -22,6 +22,8 @@ IF OBJECT_ID('tempdb..#numberAwards') IS NOT NULL
 	DROP TABLE #numberAwards
 IF OBJECT_ID('tempdb..#noshows') IS NOT NULL
 	DROP TABLE #noshows
+IF OBJECT_ID('tempdb..#gpa') IS NOT NULL
+	DROP TABLE #gpa
 		
 SELECT DISTINCT
 	gen.FIELD_VALUE AS AWD_TYPE
@@ -108,18 +110,33 @@ FROM
 	#duvalAndNassauHSGrads hsgrads
 	LEFT JOIN (SELECT ISN_ST_STDNT_A, RACE FROM MIS.dbo.ST_STDNT_A_RACE_125) race PIVOT (COUNT (RACE) FOR RACE IN ([W],[A],[B],[I],[X],[P])) AS racepivot ON racepivot.ISN_ST_STDNT_A = hsgrads.ISN_ST_STDNT_A
 
+SELECT
+	eth.*, ssn1.PREV_STDNT_SSN AS [prevSSN1], ssn2.PREV_STDNT_SSN AS [prevSSN2], ssn3.PREV_STDNT_SSN AS [prevSSN3], ssn4.PREV_STDNT_SSN AS [prevSSN4]
+INTO
+	#prevSSNs
+FROM
+	#hsGradsWithEthnicity eth
+	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn1 ON ssn1.ISN_ST_STDNT_A = eth.ISN_ST_STDNT_A
+															  AND ssn1.cnxarraycolumn = 0
+	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn2 ON ssn2.ISN_ST_STDNT_A = eth.ISN_ST_STDNT_A
+															  AND ssn2.cnxarraycolumn = 1
+	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn3 ON ssn3.ISN_ST_STDNT_A = eth.ISN_ST_STDNT_A
+															  AND ssn3.cnxarraycolumn = 2
+	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn4 ON ssn4.ISN_ST_STDNT_A = eth.ISN_ST_STDNT_A
+															  AND ssn4.cnxarraycolumn = 3
+
+
 SELECT DISTINCT
 	stdnt.*
-	,ISNULL(CAST(CASE
-		WHEN deved.[STUDENT-ID] IS NOT NULL THEN MAX(deved.[DE1050-HSCHOOL-DEV])
-		WHEN MAX(deved2.[DE1050-HSCHOOL-DEV]) = '' THEN 'Pre-SB1720'
-		ELSE MAX(deved2.[DE1050-HSCHOOL-DEV])
-	END AS VARCHAR(MAX)), 'Pre-SB1720')  AS [Dev Ed Exemption Eligibility]
+	,CAST(CASE
+			WHEN deved.[DE1050-HSCHOOL-DEV] = '' THEN 'Pre-SB1720'
+			WHEN deved.[STUDENT-ID] IS NOT NULL THEN deved.[DE1050-HSCHOOL-DEV]
+			WHEN devedbuild.stdnt_id IS NOT NULL THEN devedbuild.DE1050
+		END AS VARCHAR(MAX))  AS [Dev Ed Exemption Eligibility]
 INTO
 	#devedeligibility
 FROM
-	#hsGradsWithEthnicity stdnt
-	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 prev ON prev.ISN_ST_STDNT_A = stdnt.ISN_ST_STDNT_A
+	#prevSSNs stdnt
 	LEFT JOIN (SELECT
 					r1.[STUDENT-ID]
 					,r1.[DE1050-HSCHOOL-DEV]
@@ -127,25 +144,14 @@ FROM
 				FROM
 					StateSubmission.SDB.RecordType1 r1
 					INNER JOIN MIS.dbo.vwTermYearXwalk xwalk ON xwalk.StateReportingTerm = r1.[TERM-ID]) deved ON deved.[STUDENT-ID] = stdnt.STDNT_ID
+																												--OR deved.[STUDENT-ID] = stdnt.prevSSN1
+																												--OR deved.[STUDENT-ID] = stdnt.prevSSN2
+																												--OR deved.[STUDENT-ID] = stdnt.prevSSN3
+																												--OR deved.[STUDENT-ID] = stdnt.prevSSN4)
 																											   AND deved.RN = 1
-	LEFT JOIN (SELECT
-					r1.[STUDENT-ID]
-					,r1.[DE1050-HSCHOOL-DEV]
-					,ROW_NUMBER() OVER (PARTITION BY r1.[STUDENT-ID] ORDER BY xwalk.OrionTerm DESC) RN
-				FROM
-					StateSubmission.SDB.RecordType1 r1
-					INNER JOIN MIS.dbo.vwTermYearXwalk xwalk ON xwalk.StateReportingTerm = r1.[TERM-ID]) deved2 ON deved2.[STUDENT-ID] = prev.PREV_STDNT_SSN
-																											   AND deved2.RN = 1
-GROUP BY
-	stdnt.ISN_ST_STDNT_A
-	,stdnt.STDNT_ID
-	,stdnt.FLA_STATE_HS_CODE
-	,stdnt.INST_NM
-	,stdnt.ACT_GRAD_DT
-	,stdnt.DIPL_TYPE
-	,stdnt.SEX
-	,stdnt.Ethnicity
-	,deved.[STUDENT-ID]
+	LEFT JOIN State_Report_Data.dbo.sdb_rtype_1 devedbuild ON devedbuild.stdnt_id = stdnt.STDNT_ID
+
+
 
 SELECT DISTINCT
 	d.*
@@ -189,20 +195,6 @@ FROM
 	LEFT JOIN MIS.dbo.WF_ISIR_1213_911 isir13 ON isir13.WF_IS_SSN = t.STDNT_ID
 
 
-SELECT
-	pell.*, ssn1.PREV_STDNT_SSN AS [prevSSN1], ssn2.PREV_STDNT_SSN AS [prevSSN2], ssn3.PREV_STDNT_SSN AS [prevSSN3], ssn4.PREV_STDNT_SSN AS [prevSSN4]
-INTO
-	#prevSSNs
-FROM
-	#pelleligibility pell
-	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn1 ON ssn1.ISN_ST_STDNT_A = pell.ISN_ST_STDNT_A
-															  AND ssn1.cnxarraycolumn = 0
-	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn2 ON ssn2.ISN_ST_STDNT_A = pell.ISN_ST_STDNT_A
-															  AND ssn2.cnxarraycolumn = 1
-	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn3 ON ssn3.ISN_ST_STDNT_A = pell.ISN_ST_STDNT_A
-															  AND ssn3.cnxarraycolumn = 2
-	LEFT JOIN MIS.dbo.ST_STDNT_A_PREV_STDNT_SSN_USED_125 ssn4 ON ssn4.ISN_ST_STDNT_A = pell.ISN_ST_STDNT_A
-															  AND ssn4.cnxarraycolumn = 3
 
 SELECT
 	prev.*
@@ -212,23 +204,38 @@ SELECT
 INTO
 	#duals
 FROM
-	#prevSSNs prev
+	#pelleligibility prev
 	LEFT JOIN (SELECT
-					r6.*
-					,xwalk.OrionTerm					
-				FROM
-					StateSubmission.SDB.RecordType6 r6
-					INNER JOIN MIS.dbo.vwTermYearXwalk xwalk ON xwalk.StateReportingTerm = r6.DE1028
+					class.*
+					,class.EFF_TRM AS OrionTerm
+				FROM 
+					MIS.dbo.ST_STDNT_CLS_A_235 class
+					LEFT join st_stdnt_term_exmptn_a_127 ex ON ex.EXMPT_APLY_STDNT_ID = class.STDNT_ID
+														    AND substring(ex.exmpt_aply_crs_ref, 1, 10) = class.CRS_ID
+															AND ex.EXMPT_APLY_EFF_TRM = class.EFF_TRM
+															AND ex.EXMPT_APLY_FEE_TY = 'MATR'
+															AND (SUBSTRING(exmpt_aply_cd_cred, 1, 2) IN ('D ', 'DL', 'DF', 'E ') OR substring(exmpt_aply_cd_cred, 1, 4) = 'VOCD')
 				WHERE
-					r6.DE3004 <> 'NN') dual ON dual.DE1021 IN (prev.STDNT_ID, prev.prevSSN1, prev.prevSSN2, prev.prevSSN3, prev.prevSSN4)
+					class.TRNSCTN_TY <> 'D'
+					AND ex.STDNT_ID IS NULL
+					AND (SELECT
+							field_value 
+						FROM 
+							fn_get_code_value('CRED-TYPE', class.CRED_TY, '7')) = 'Y') nondual ON nondual.STDNT_ID = prev.STDNT_ID 
+																							   AND LEFT(nondual.OrionTerm, 4) >= LEFT(prev.ACT_GRAD_DT, 4)
 	LEFT JOIN (SELECT
-					r6.*
-					,xwalk.OrionTerm					
-				FROM
-					StateSubmission.SDB.RecordType6 r6
-					INNER JOIN MIS.dbo.vwTermYearXwalk xwalk ON xwalk.StateReportingTerm = r6.DE1028
+					class.*
+					,class.EFF_TRM AS OrionTerm
+				FROM 
+					MIS.dbo.ST_STDNT_CLS_A_235 class
+					INNER JOIN st_stdnt_term_exmptn_a_127 ex ON ex.EXMPT_APLY_STDNT_ID = class.STDNT_ID
+														    AND substring(ex.exmpt_aply_crs_ref, 1, 10) = class.CRS_ID
+															AND ex.EXMPT_APLY_EFF_TRM = class.EFF_TRM
+															AND ex.EXMPT_APLY_FEE_TY = 'MATR'
+															AND (SUBSTRING(exmpt_aply_cd_cred, 1, 2) IN ('D ', 'DL', 'DF', 'E ') OR substring(exmpt_aply_cd_cred, 1, 4) = 'VOCD')
 				WHERE
-					r6.DE3004 = 'NN') nondual ON nondual.DE1021 IN (prev.STDNT_ID, prev.prevSSN1, prev.prevSSN2, prev.prevSSN3, prev.prevSSN4)
+					class.TRNSCTN_TY <> 'D') dual ON dual.STDNT_ID = prev.STDNT_ID
+												 
 GROUP BY
 	prev.ISN_ST_STDNT_A
 	,prev.ACT_GRAD_DT
@@ -329,6 +336,7 @@ SELECT
 			OR stdnt.BA_READMIT_TERM BETWEEN CAST(num.finAidYear - 1 AS VARCHAR) + '3' AND CAST(num.finAidYear AS VARCHAR) + '3'
 			OR (num.[Last Term Dual Enrolled] <> 'Never' AND COUNT(obj.PGM_ID) > 0)) 
 			AND num.[Last Term At FSCJ] = 'Never' THEN 'No Show'
+			WHEN num.[Last Term At FSCJ] <> 'Never' THEN 'Attended'
 	END AS [No Shows]
 INTO
 	#noshows
@@ -366,8 +374,46 @@ GROUP BY
 	,stdnt.VC_READMT_TERM
 	,stdnt.BA_APPL_DT
 	,stdnt.BA_READMIT_TERM
-												
+	
+
 SELECT
-	*
-FROM 
+	n.*
+	,term.GPA
+INTO
+	#gpa
+FROM
 	#noshows n
+	LEFT JOIN (SELECT
+					*
+					,ROW_NUMBER() OVER (PARTITION BY STDNT_ID ORDER BY TRM_YR DESC) RN
+				FROM
+					MIS.dbo.ST_STDNT_TERM_A_236
+				WHERE
+					GPA > 0) term ON term.STDNT_ID = n.STDNT_ID
+								  AND term.RN = 1
+
+SELECT
+	g.STDNT_ID
+	,g.SEX AS [Gender]
+	,g.Ethnicity
+	,g.INST_NM
+	,g.FLA_STATE_HS_CODE
+	,g.ACT_GRAD_DT
+	,g.DIPL_TYPE
+	,CASE
+		WHEN g.[Dev Ed Exemption Eligibility] = 'Y' THEN 'Eligible'
+		WHEN g.[Dev Ed Exemption Eligibility] = 'N' THEN 'Not Eligible'
+		WHEN g.[Dev Ed Exemption Eligibility] = 'D' THEN 'Eligible, already completed some Dev-Ed Courses'
+		WHEN g.[Dev Ed Exemption Eligibility] = 'W' THEN 'Unknown'
+		WHEN g.[Dev Ed Exemption Eligibility] = 'X' THEN 'Not Applicable'
+	END AS [Dev Ed Exmemption Eligibility]
+	,g.[Dev Ed Exempted]
+	,g.[Last Term Dual Enrolled]
+	,g.[First Term At FSCJ]
+	,g.[Last Term At FSCJ]
+	,g.[Highest Degree Earned]
+	,g.[Number of Awards]
+	,g.[No Shows]
+	,g.GPA AS [Latest Term GPA]
+FROM
+	#gpa g
